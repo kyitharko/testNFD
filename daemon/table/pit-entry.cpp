@@ -24,6 +24,7 @@
  */
 
 #include "pit-entry.hpp"
+#include "../ttt.hpp"
 #include <algorithm>
 
 namespace nfd {
@@ -103,6 +104,12 @@ Entry::insertOrUpdateOutRecord(Face& face, const Interest& interest)
   if (it == m_outRecords.end()) {
     m_outRecords.emplace_front(face);
     it = m_outRecords.begin();
+
+    // XXX-NIC PIT entry is relevant to NDN-NIC only if NDN-NIC is an upstream.
+    // Insertion is recorded when an out-record on NDN-NIC is inserted.
+    if (Ttt::isNdnNic(face)) {
+      Ttt::recordTableChange(TttTableAction::INS, TttTable::PIT, this->getName());
+    }
   }
 
   it->update(interest);
@@ -116,6 +123,12 @@ Entry::deleteOutRecord(const Face& face)
     [&face] (const OutRecord& outRecord) { return &outRecord.getFace() == &face; });
   if (it != m_outRecords.end()) {
     m_outRecords.erase(it);
+
+    // XXX-NIC PIT entry is relevant to NDN-NIC only if NDN-NIC is an upstream.
+    // Deletion is recorded when an out-record on NDN-NIC is deleted.
+    if (Ttt::isNdnNic(face)) {
+      Ttt::recordTableChange(TttTableAction::DEL, TttTable::PIT, this->getName());
+    }
   }
 }
 

@@ -24,6 +24,7 @@
  */
 
 #include "cs.hpp"
+#include "../ttt.hpp"
 #include "core/algorithm.hpp"
 #include "core/asserts.hpp"
 #include "core/logger.hpp"
@@ -108,6 +109,8 @@ Cs::insert(const Data& data, bool isUnsolicited)
   }
   else {
     m_policy->afterInsert(it);
+    // XXX-NIC
+    Ttt::recordTableChange(TttTableAction::INS, TttTable::CS, data.getName());
   }
 }
 
@@ -197,6 +200,8 @@ Cs::setPolicyImpl(unique_ptr<Policy> policy)
   NFD_LOG_DEBUG("set-policy " << policy->getName());
   m_policy = std::move(policy);
   m_beforeEvictConnection = m_policy->beforeEvict.connect([this] (iterator it) {
+      // XXX-NIC
+      Ttt::recordTableChange(TttTableAction::DEL, TttTable::CS, it->getName());
       m_table.erase(it);
     });
 

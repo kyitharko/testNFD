@@ -24,6 +24,7 @@
  */
 
 #include "fib-entry.hpp"
+#include "../ttt.hpp"
 
 namespace nfd {
 namespace fib {
@@ -52,6 +53,14 @@ Entry::hasNextHop(const Face& face) const
 void
 Entry::addNextHop(Face& face, uint64_t cost)
 {
+  // XXX-NIC FIB entry is relevant to NDN-NIC only if it has a nexthop other than NDN-NIC itself.
+  // Insertion is recorded when the first non-NDN-NIC nexthop is added.
+  if (!Ttt::isNdnNic(face) &&
+      std::none_of(m_nextHops.begin(), m_nextHops.end(),
+                   [] (const NextHop& nexthop) { return !Ttt::isNdnNic(nexthop.getFace()); })) {
+    Ttt::recordTableChange(TttTableAction::INS, TttTable::FIB, m_prefix);
+  }
+
   auto it = this->findNextHop(face);
   if (it == m_nextHops.end()) {
     m_nextHops.emplace_back(face);
@@ -68,6 +77,14 @@ Entry::removeNextHop(const Face& face)
   auto it = this->findNextHop(face);
   if (it != m_nextHops.end()) {
     m_nextHops.erase(it);
+
+    // XXX-NIC FIB entry is relevant to NDN-NIC only if it has a nexthop other than NDN-NIC itself.
+    // Deletion is recorded when the last non-NDN-NIC nexthop is removed.
+    if (!Ttt::isNdnNic(face) &&
+        std::none_of(m_nextHops.begin(), m_nextHops.end(),
+                     [] (const NextHop& nexthop) { return !Ttt::isNdnNic(nexthop.getFace()); })) {
+      Ttt::recordTableChange(TttTableAction::DEL, TttTable::FIB, m_prefix);
+    }
   }
 }
 

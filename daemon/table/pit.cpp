@@ -24,6 +24,7 @@
  */
 
 #include "pit.hpp"
+#include "../ttt.hpp"
 
 namespace nfd {
 namespace pit {
@@ -105,6 +106,13 @@ Pit::erase(Entry* entry, bool canDeleteNte)
 {
   name_tree::Entry* nte = m_nameTree.getEntry(*entry);
   BOOST_ASSERT(nte != nullptr);
+
+  // XXX-NIC PIT entry is relevant to NDN-NIC only if NDN-NIC is an upstream.
+  // Deletion is recorded when an entry containing an out-record on NDN-NIC is erased.
+  if (std::any_of(entry->out_begin(), entry->out_end(),
+                  [] (const pit::OutRecord& outR) { return Ttt::isNdnNic(outR.getFace()); })) {
+    Ttt::recordTableChange(TttTableAction::DEL, TttTable::PIT, entry->getName());
+  }
 
   nte->erasePitEntry(entry);
   if (canDeleteNte) {

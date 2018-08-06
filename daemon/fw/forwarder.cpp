@@ -27,6 +27,7 @@
 #include "algorithm.hpp"
 #include "best-route-strategy2.hpp"
 #include "strategy.hpp"
+#include "../ttt.hpp"
 #include "core/logger.hpp"
 #include "table/cleanup.hpp"
 #include <ndn-cxx/lp/tags.hpp>
@@ -175,6 +176,12 @@ Forwarder::onIncomingInterest(Face& inFace, const Interest& interest)
 void
 Forwarder::onInterestLoop(Face& inFace, const Interest& interest)
 {
+  // XXX-NIC Duplicate Nonce is unlikely to happen in single broadcast media.
+  // Just record all of them as DROP.
+  if (Ttt::isNdnNic(inFace)) {
+    Ttt::recordPacketArrival(interest, TttPacketDecision::DROP);
+  }
+
   // if multi-access face, drop
   if (inFace.getLinkType() == ndn::nfd::LINK_TYPE_MULTI_ACCESS) {
     NFD_LOG_DEBUG("onInterestLoop face=" << inFace.getId() <<
@@ -220,6 +227,21 @@ Forwarder::onContentStoreMiss(const Face& inFace, const shared_ptr<pit::Entry>& 
     return;
   }
 
+  // XXX-NIC Interest does not match CS
+  if (Ttt::isNdnNic(inFace)) {
+    const fib::Entry& fibEntry = m_fib.findLongestPrefixMatch(*pitEntry);
+    // If it matches a FIB entry and there's some nexthop other than NDN-NIC, it's accepted.
+    if (std::any_of(fibEntry.getNextHops().begin(), fibEntry.getNextHops().end(),
+                    [] (const fib::NextHop& nexthop) { return !Ttt::isNdnNic(nexthop.getFace()); })) {
+      Ttt::recordPacketArrival(interest, TttPacketDecision::FIB);
+    }
+    else {
+      Ttt::recordPacketArrival(interest, TttPacketDecision::DROP);
+      this->onInterestReject(pitEntry);
+      return;
+    }
+  }
+
   // dispatch to strategy: after incoming Interest
   this->dispatchToStrategy(*pitEntry,
     [&] (fw::Strategy& strategy) { strategy.afterReceiveInterest(inFace, interest, pitEntry); });
@@ -230,6 +252,10 @@ Forwarder::onContentStoreHit(const Face& inFace, const shared_ptr<pit::Entry>& p
                              const Interest& interest, const Data& data)
 {
   NFD_LOG_DEBUG("onContentStoreHit interest=" << interest.getName());
+  // XXX-NIC Interest matches CS
+  if (Ttt::isNdnNic(inFace)) {
+    Ttt::recordPacketArrival(interest, TttPacketDecision::CS);
+  }
 
   data.setTag(make_shared<lp::IncomingFaceIdTag>(face::FACEID_CONTENT_STORE));
   // XXX should we lookup PIT for other Interests that also match csMatch?
@@ -326,6 +352,23 @@ Forwarder::onIncomingData(Face& inFace, const Data& data)
     return;
   }
 
+  // XXX-NIC Data matches PIT
+  if (Ttt::isNdnNic(inFace)) {
+    // Further check whether PIT entry has an out-record on NDN-NIC.
+    if (std::any_of(pitMatches.begin(), pitMatches.end(),
+        [&inFace] (const shared_ptr<pit::Entry>& pitEntry) {
+          return pitEntry->getOutRecord(inFace) != pitEntry->getOutRecords().end();
+        })) {
+      Ttt::recordPacketArrival(data, TttPacketDecision::PIT);
+    }
+    else {
+      // We must drop this Data to keep CS trace accurate.
+      NFD_LOG_DEBUG("onIncomingData no-out-record");
+      Ttt::recordPacketArrival(data, TttPacketDecision::DROP);
+      return;
+    }
+  }
+
   // CS insert
   m_cs.insert(data);
 
@@ -373,6 +416,11 @@ Forwarder::onIncomingData(Face& inFace, const Data& data)
 void
 Forwarder::onDataUnsolicited(Face& inFace, const Data& data)
 {
+  // XXX-NIC Data does not match PIT
+  if (Ttt::isNdnNic(inFace)) {
+    Ttt::recordPacketArrival(data, TttPacketDecision::DROP);
+  }
+
   // accept to cache?
   fw::UnsolicitedDataDecision decision = m_unsolicitedDataPolicy->decide(inFace, data);
   if (decision == fw::UnsolicitedDataDecision::CACHE) {
