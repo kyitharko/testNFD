@@ -1,0 +1,24 @@
+--ignore-space-change 
+
+###NFD-5.0.1 Date
+19e2e6d85890a037fd493d0415dbdd5bfc186241
+commit 19e2e6d85890a037fd493d0415dbdd5bfc186241
+Author: Alexander Afanasyev <alexander.afanasyev@ucla.edu>
+Date:   Fri Jan 20 20:21:36 2017 -0800
+
+    docs+build: Prepare release 0.5.1
+
+    Change-Id: If6c2cf06d604c6541bedec6cf87731f1f593eae4
+    Refs: #3859
+
+
+####ChronoSync Hash
+
+36eb3edb8169bdc345490128b80002b204f026e5
+
+
+
+#####NLSR Hash
+
+
+c6a852234dbfc5db26cf77e9b252fdfa2724e64d
